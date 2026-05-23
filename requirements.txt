@@ -1,0 +1,12 @@
+# UST JupyterLab / GPU server (Option A)
+streamlit>=1.32
+torch>=2.2.0
+transformers==4.46.3
+accelerate>=1.2.1
+safetensors>=0.4.0
+huggingface_hub>=0.26.0
+requests>=2.32.0
+Pillow>=10.0.0
+sentencepiece>=0.2.0
+scipy>=1.11.0
+protobuf>=4.25.0
