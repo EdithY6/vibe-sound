@@ -1,7 +1,5 @@
 #!/bin/bash
-# If the link opens but the page is blank, run ONCE:
-#   bash fix_blank_page.sh pioneer-article-pope-silence.trycloudflare.com
-# (use YOUR link hostname — without https://)
+# bash fix_blank_page.sh YOUR-SUBDOMAIN.trycloudflare.com
 set -e
 cd "$(dirname "$0")"
 
@@ -15,7 +13,12 @@ HOST="${HOST%%/*}"
 
 # shellcheck disable=SC1091
 source .venv/bin/activate
-[ -f .env ] && set -a && . ./.env && set +a
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
 export VIBESOUND_MUSIC_BACKEND="${VIBESOUND_MUSIC_BACKEND:-local}"
 export STREAMLIT_BROWSER_SERVER_ADDRESS="$HOST"
 export STREAMLIT_BROWSER_SERVER_PORT=443
