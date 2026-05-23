@@ -1,6 +1,5 @@
 #!/bin/bash
-# One command: bash start.sh
-# Keeps this window open and prints your public link.
+# bash start.sh  — one terminal, keeps running, prints public link
 set -e
 cd "$(dirname "$0")"
 
@@ -24,7 +23,38 @@ pkill -9 -f streamlit 2>/dev/null || true
 pkill -9 -f cloudflared 2>/dev/null || true
 sleep 2
 
-echo "==> Starting VibeSound app (port 8502)..."
+if [ ! -x /tmp/cloudflared ]; then
+  echo "==> Downloading cloudflared..."
+  curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
+  chmod +x /tmp/cloudflared
+fi
+
+CF_LOG=/tmp/vibesound-cf.log
+rm -f "$CF_LOG"
+
+echo "==> Starting public tunnel..."
+/tmp/cloudflared tunnel --url http://127.0.0.1:8502 --protocol http2 2>&1 | tee "$CF_LOG" &
+CF_PID=$!
+
+TUNNEL_HOST=""
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 20 25 30; do
+  TUNNEL_HOST=$(grep -oE '[a-z0-9-]+\.trycloudflare\.com' "$CF_LOG" | head -1 || true)
+  if [ -n "$TUNNEL_HOST" ]; then
+    break
+  fi
+  sleep 1
+done
+
+if [ -z "$TUNNEL_HOST" ]; then
+  echo "ERROR: Could not get trycloudflare URL from tunnel log."
+  kill "$CF_PID" 2>/dev/null || true
+  exit 1
+fi
+
+export STREAMLIT_BROWSER_SERVER_ADDRESS="$TUNNEL_HOST"
+export STREAMLIT_BROWSER_SERVER_PORT=443
+
+echo "==> Starting VibeSound for https://$TUNNEL_HOST ..."
 streamlit run app.py \
   --server.port=8502 \
   --server.address=127.0.0.1 \
@@ -32,32 +62,22 @@ streamlit run app.py \
   --server.enableCORS=false \
   --server.enableXsrfProtection=false &
 
-echo "    Waiting for app..."
+ST_PID=$!
+sleep 8
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8502/ | grep -q 200; then
-    echo "    App is ready."
     break
   fi
   sleep 2
 done
 
-if ! curl -s -o /dev/null http://127.0.0.1:8502/; then
-  echo "ERROR: App did not start. Check .env and run: bash setup.sh"
-  exit 1
-fi
-
-if [ ! -x /tmp/cloudflared ]; then
-  echo "==> Downloading cloudflared (first time only)..."
-  curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
-  chmod +x /tmp/cloudflared
-fi
-
 echo ""
 echo "============================================================"
+echo "  OPEN THIS LINK (incognito / private window):"
+echo "  https://$TUNNEL_HOST"
 echo "  KEEP THIS WINDOW OPEN"
-echo "  Copy the https://....trycloudflare.com link below"
-echo "  Open it in Chrome/Safari (use a new incognito tab)"
 echo "============================================================"
 echo ""
 
-exec /tmp/cloudflared tunnel --url http://127.0.0.1:8502 --protocol http2
+wait "$CF_PID" || true
+kill "$ST_PID" 2>/dev/null || true
