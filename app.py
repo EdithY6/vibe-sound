@@ -120,20 +120,26 @@ def run_mood(text: str) -> tuple[str, float, list[tuple[str, float]]]:
         return "neutral", 1.0, [("neutral", 1.0)]
 
     model_name = FINETUNED_MODEL if USE_FINETUNED_MODEL else PLACEHOLDER_MODEL
+    cuda = torch.cuda.is_available()
+    dtype = torch.float16 if cuda else torch.float32
     tokenizer = AutoTokenizer.from_pretrained(model_name, token=get_hf_token() or None)
     model = AutoModelForSequenceClassification.from_pretrained(
         model_name,
         low_cpu_mem_usage=True,
         token=get_hf_token() or None,
+        torch_dtype=dtype,
     )
     model.eval()
 
-    if QUANTIZE_MOOD_MODEL and USE_FINETUNED_MODEL:
+    # int8 dynamic quant is CPU-only; on GPU use fp16 weights instead
+    if cuda:
+        model = model.to("cuda")
+    elif QUANTIZE_MOOD_MODEL and USE_FINETUNED_MODEL:
         model = torch.quantization.quantize_dynamic(
             model, {torch.nn.Linear}, dtype=torch.qint8
         )
 
-    device = 0 if torch.cuda.is_available() else -1
+    device = 0 if cuda else -1
     clf = pipeline(
         "text-classification",
         model=model,
