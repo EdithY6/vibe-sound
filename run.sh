@@ -19,11 +19,13 @@ fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 
-PORT="${STREAMLIT_SERVER_PORT:-8501}"
+PORT="${STREAMLIT_SERVER_PORT:-8502}"
 ADDR="${STREAMLIT_SERVER_ADDRESS:-0.0.0.0}"
+MUSIC_BACKEND="${VIBESOUND_MUSIC_BACKEND:-auto}"
 
 echo "Starting Streamlit on ${ADDR}:${PORT} ..."
-echo "Open: http://imz250.ust.hk:8129/proxy/${PORT}/"
+echo "Music backend: ${MUSIC_BACKEND} (set VIBESOUND_MUSIC_BACKEND=local in .env for server)"
+echo "Tunnel: /tmp/cloudflared tunnel --url http://127.0.0.1:${PORT}"
 
 exec streamlit run app.py \
   --server.port="${PORT}" \

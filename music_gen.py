@@ -177,7 +177,11 @@ def generate_music_space(prompt: str, token: str | None) -> bytes:
 def resolve_backend() -> str:
     if MUSIC_BACKEND in ("local", "space"):
         return MUSIC_BACKEND
-    return "local" if torch.cuda.is_available() else "space"
+    # auto: prefer local on server (more RAM); Space queue API breaks often
+    if torch.cuda.is_available():
+        return "local"
+    # CPU-only: still local if explicitly not space-only; caller sets VIBESOUND_MUSIC_BACKEND=local
+    return "space"
 
 
 def generate_music(prompt: str, hf_token: str = "") -> tuple[bytes, str]:

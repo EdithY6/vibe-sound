@@ -172,7 +172,12 @@ def run_prompt_builder(caption: str, top_mood: str) -> str:
     )
     raw_output = gen(instruction)[0]["generated_text"].strip()
     _free(gen)
-    if raw_output and len(raw_output.split()) <= 20:
+    if (
+        raw_output
+        and len(raw_output.split()) <= 20
+        and not raw_output.isdigit()
+        and len(raw_output) > 2
+    ):
         return raw_output
     return MOOD_FALLBACK.get(top_mood, "calm ambient music")
 
@@ -258,7 +263,9 @@ if submitted:
 
     st.markdown(f'<div class="caption-box">📝 Scene: {caption}</div>', unsafe_allow_html=True)
 
-    mood_label = "fine-tuned RoBERTa" if USE_FINETUNED_MODEL else "placeholder"
+    mood_label = (
+        FINETUNED_MODEL if USE_FINETUNED_MODEL else PLACEHOLDER_MODEL
+    )
     st.markdown(
         f'<p class="step-label">★ Pipeline 2 — {mood_label}</p>',
         unsafe_allow_html=True,
@@ -343,10 +350,11 @@ if submitted:
 with st.sidebar:
     st.markdown("### 🔬 Architecture")
     st.success("**P1** BLIP (local)")
-    st.success("**P2** RoBERTa mood (local)")
+    st.success(f"**P2** `{FINETUNED_MODEL if USE_FINETUNED_MODEL else PLACEHOLDER_MODEL}`")
     st.success("**P3** flan-t5 (local)")
     cuda = torch.cuda.is_available()
-    st.success(f"**Music** {'GPU local' if cuda else 'HF Space / CPU'}")
+    mb = resolve_backend()
+    st.success(f"**Music** backend=`{mb}` · CUDA=`{cuda}`")
     st.caption(f"CUDA: `{cuda}` · device count: `{torch.cuda.device_count() if cuda else 0}`")
     if not get_hf_token():
         st.warning("Set `HF_TOKEN` in environment for gated mood model.")
