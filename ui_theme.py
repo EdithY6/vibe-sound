@@ -28,8 +28,8 @@ def inject_day_theme() -> None:
   }
   .vs-hero { margin-bottom: 0.25rem; }
   .vs-title {
-    font-size: 2.35rem; font-weight: 700; letter-spacing: -0.02em;
-    color: #0F172A; margin: 0;
+    font-size: clamp(2.75rem, 6vw, 4.25rem); font-weight: 700; letter-spacing: -0.03em;
+    color: #0F172A; margin: 0; line-height: 1.1;
   }
   .vs-title span {
     background: linear-gradient(90deg, #DB2777, #EA580C);
@@ -85,7 +85,7 @@ def render_hero() -> None:
   <div class="vs-steps">
     <span class="vs-step-pill"><strong>1</strong> Upload photo</span>
     <span class="vs-step-pill"><strong>2</strong> Add caption (optional)</span>
-    <span class="vs-step-pill"><strong>3</strong> Generate &amp; download</span>
+    <span class="vs-step-pill"><strong>3</strong> Generate &amp; download MP4</span>
   </div>
 </div>
 """,

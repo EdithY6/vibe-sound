@@ -5,6 +5,8 @@ import io
 import json
 import os
 import secrets
+import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -14,6 +16,8 @@ import torch
 MUSICGEN_MODEL = os.environ.get("MUSICGEN_MODEL", "facebook/musicgen-small")
 MUSICGEN_SPACE_URL = "https://facebook-musicgen.hf.space"
 MUSIC_BACKEND = os.environ.get("VIBESOUND_MUSIC_BACKEND", "auto")  # auto | local | space
+# mp4 = AAC in .mp4 (Reel-friendly); wav = raw WAV fallback if ffmpeg missing
+AUDIO_FORMAT = os.environ.get("VIBESOUND_AUDIO_FORMAT", "mp4").lower()
 
 
 def _read_audio_result(result) -> bytes:
@@ -174,6 +178,53 @@ def generate_music_space(prompt: str, token: str | None) -> bytes:
     return _pick_audio_output(data)
 
 
+def wav_bytes_to_mp4(wav_bytes: bytes) -> bytes:
+    """Encode WAV bytes to MP4 (AAC). Requires ffmpeg on PATH."""
+    if not shutil.which("ffmpeg"):
+        raise RuntimeError("ffmpeg not found — install ffmpeg or set VIBESOUND_AUDIO_FORMAT=wav")
+    proc = subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "wav",
+            "-i",
+            "pipe:0",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-movflags",
+            "+faststart",
+            "-f",
+            "mp4",
+            "pipe:1",
+        ],
+        input=wav_bytes,
+        capture_output=True,
+        timeout=120,
+        check=False,
+    )
+    if proc.returncode != 0:
+        err = (proc.stderr or b"").decode(errors="replace")[:400]
+        raise RuntimeError(f"ffmpeg failed: {err or proc.returncode}")
+    if not proc.stdout:
+        raise RuntimeError("ffmpeg produced empty MP4")
+    return proc.stdout
+
+
+def package_audio(wav_bytes: bytes) -> tuple[bytes, str, str]:
+    """Return (bytes, file_extension, mime_type)."""
+    if AUDIO_FORMAT != "mp4":
+        return wav_bytes, "wav", "audio/wav"
+    try:
+        return wav_bytes_to_mp4(wav_bytes), "mp4", "audio/mp4"
+    except Exception:
+        return wav_bytes, "wav", "audio/wav"
+
+
 def resolve_backend() -> str:
     if MUSIC_BACKEND in ("local", "space"):
         return MUSIC_BACKEND
@@ -186,17 +237,20 @@ def resolve_backend() -> str:
 
 def generate_music(
     prompt: str, hf_token: str = "", max_new_tokens: int = 256
-) -> tuple[bytes, str]:
-    """Returns (wav_bytes, backend_label)."""
+) -> tuple[bytes, str, str]:
+    """Returns (audio_bytes, backend_label, file_extension e.g. mp4|wav)."""
     backend = resolve_backend()
     if backend == "local":
         try:
-            return (
-                generate_music_local(prompt, max_new_tokens=max_new_tokens),
-                f"local `{MUSICGEN_MODEL}`",
-            )
+            wav = generate_music_local(prompt, max_new_tokens=max_new_tokens)
+            audio, ext, _mime = package_audio(wav)
+            return audio, f"local `{MUSICGEN_MODEL}`", ext
         except Exception as e:
             if MUSIC_BACKEND == "local":
                 raise
-            return generate_music_space(prompt, hf_token or None), f"space (local failed: {e})"
-    return generate_music_space(prompt, hf_token or None), "HF Space (Gradio 3)"
+            wav = generate_music_space(prompt, hf_token or None)
+            audio, ext, _mime = package_audio(wav)
+            return audio, f"space (local failed: {e})", ext
+    wav = generate_music_space(prompt, hf_token or None)
+    audio, ext, _mime = package_audio(wav)
+    return audio, "HF Space (Gradio 3)", ext

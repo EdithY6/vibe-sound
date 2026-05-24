@@ -18,7 +18,8 @@ source .venv/bin/activate
 pip install -U pip wheel
 
 if command -v nvidia-smi >/dev/null 2>&1; then
-  echo "==> GPU detected — installing requirements.txt"
+  echo "==> GPU detected — CUDA PyTorch + requirements"
+  pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
   pip install -r requirements.txt
 else
   echo "==> No GPU — CPU PyTorch + requirements"
@@ -42,6 +43,12 @@ if [ -n "${HF_TOKEN:-}" ]; then
   else
     python -m huggingface_hub.commands.huggingface_cli login --token "$HF_TOKEN" || true
   fi
+fi
+
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  echo ""
+  echo "Note: install ffmpeg for MP4 downloads (else app falls back to WAV):"
+  echo "  conda install -y -c conda-forge ffmpeg   # or: apt-get install ffmpeg"
 fi
 
 echo ""

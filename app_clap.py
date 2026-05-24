@@ -375,18 +375,21 @@ if submitted:
             st.write(", ".join(tag_labels) if tag_labels else "—")
 
         st.write(f"Composing ~{music_seconds}s of music…")
-        audio_bytes, backend_used = generate_music(
+        audio_bytes, backend_used, audio_ext = generate_music(
             music_prompt, hf_token, max_new_tokens=music_max_new_tokens
         )
         status.update(label="Done — your track is ready", state="complete")
 
+    audio_mime = "audio/mp4" if audio_ext == "mp4" else "audio/wav"
     st.success("Your background music is ready.")
-    st.audio(audio_bytes, format="audio/wav")
+    if audio_ext != "mp4":
+        st.caption("MP4 export needs `ffmpeg` on the server — downloaded as WAV this time.")
+    st.audio(audio_bytes, format=audio_mime)
     st.download_button(
-        label="Download WAV",
+        label="Download MP4" if audio_ext == "mp4" else "Download WAV",
         data=audio_bytes,
-        file_name=f"vibesound_{top_mood}.wav",
-        mime="audio/wav",
+        file_name=f"vibesound_{top_mood}.{audio_ext}",
+        mime=audio_mime,
         type="primary",
         use_container_width=True,
     )
