@@ -1,7 +1,7 @@
 """
 ISOM5240 — VibeSound (UST server / JupyterLab deploy)
 
-Pipelines 1–3: local transformers (sequential load/unload).
+Pipelines 1–2: local transformers; P3: context-aware prompt (no extra LLM).
 Music: local MusicGen on GPU if available, else facebook/MusicGen HF Space.
 """
 from __future__ import annotations
@@ -30,7 +30,8 @@ PLACEHOLDER_MODEL = "bhadresh-savani/distilbert-base-uncased-emotion"
 FINETUNED_MODEL = "MelodyWEN7/vibesound-music-mood-classifier"
 
 IMAGE_CAPTION_MODEL = "nlpconnect/vit-gpt2-image-captioning"
-FLANT5_MODEL = "google/flan-t5-small"
+CAPTION_MODEL_LABEL = "ViT-GPT2 image captioning"
+PROMPT_BUILDER_LABEL = "Context-aware music prompt"
 
 PLACEHOLDER_REMAP = {
     "joy": "happy",
@@ -43,13 +44,46 @@ PLACEHOLDER_REMAP = {
 
 FINETUNED_LABELS = ["happy", "sad", "romantic", "intense", "surprised", "neutral"]
 
-MOOD_FALLBACK = {
-    "happy": "upbeat acoustic guitar, bright cheerful, fast tempo, major key",
-    "sad": "slow melancholic piano, minor key, cinematic, emotional",
-    "romantic": "soft romantic acoustic guitar, warm gentle, slow tempo",
-    "intense": "dramatic orchestra, heavy drums, fast, dark, powerful",
-    "surprised": "playful quirky ukulele, bouncy, dynamic, bright",
-    "neutral": "calm ambient background, soft instrumental, peaceful",
+# Short musical cores for weighted blending when mood scores are mixed
+MOOD_MUSIC_CORE: dict[str, str] = {
+    "happy": "upbeat acoustic guitar, bright major melody, fast tempo, hand claps, joyful",
+    "sad": "slow piano, soft strings, minor key, sparse, emotional, gentle reverb",
+    "romantic": "warm nylon guitar, tender legato, slow intimate tempo, soft pad",
+    "intense": "dramatic orchestra hits, heavy drums, driving rhythm, dark brass, epic",
+    "surprised": "playful ukulele, bouncy staccato, quirky accents, light cartoon energy",
+    "neutral": "lo-fi electric piano, mellow drums, calm ambient bed, unobtrusive",
+}
+
+# Map words in image caption / user text → extra musical descriptors
+SCENE_MUSIC_HINTS: dict[str, str] = {
+    "laugh": "laughing bright energetic",
+    "smile": "smiling warm positive",
+    "girl": "youthful light",
+    "boy": "youthful light",
+    "child": "innocent playful",
+    "dance": "rhythmic danceable groove",
+    "party": "festive crowd energy",
+    "night": "nocturnal soft neon",
+    "beach": "sunny open airy",
+    "city": "urban modern beat",
+    "couple": "intimate chemistry",
+    "wedding": "elegant celebration",
+    "cry": "melancholic fragile",
+    "angry": "tense edgy",
+    "run": "dynamic forward motion",
+}
+
+USER_TEXT_HINTS: dict[str, str] = {
+    "best day": "celebratory uplifting peak moment",
+    "love": "affectionate heartwarming",
+    "girl": "sweet playful feminine energy",
+    "boy": "warm playful energy",
+    "forever": "timeless sentimental",
+    "miss": "nostalgic longing",
+    "party": "club-ready energetic",
+    "summer": "bright tropical warmth",
+    "together": "connected harmonious",
+    "memory": "nostalgic cinematic",
 }
 
 MOOD_EMOJI = {
@@ -167,32 +201,72 @@ def run_mood(text: str) -> tuple[str, float, list[tuple[str, float]]]:
     return top_mood, top_score, display_scores
 
 
-@torch.inference_mode()
-def run_prompt_builder(caption: str, top_mood: str) -> str:
-    device = 0 if torch.cuda.is_available() else -1
-    gen = pipeline(
-        "text2text-generation",
-        model=FLANT5_MODEL,
-        torch_dtype=torch.float16 if torch.cuda.is_available() else None,
-        max_new_tokens=40,
-        device=device,
-    )
-    instruction = (
-        f"Generate background music keywords for an Instagram reel. "
-        f"Scene: {caption}. "
-        f"Mood: {top_mood}. "
-        f"Output comma-separated music style keywords only, maximum 15 words."
-    )
-    raw_output = gen(instruction)[0]["generated_text"].strip()
-    _free(gen)
-    if (
-        raw_output
-        and len(raw_output.split()) <= 20
-        and not raw_output.isdigit()
-        and len(raw_output) > 2
-    ):
-        return raw_output
-    return MOOD_FALLBACK.get(top_mood, "calm ambient music")
+def _hints_from_text(text: str, hint_map: dict[str, str]) -> list[str]:
+    t = text.lower()
+    found: list[str] = []
+    for phrase, hint in sorted(hint_map.items(), key=lambda x: -len(x[0])):
+        if phrase in t and hint not in found:
+            found.append(hint)
+    return found[:3]
+
+
+def _blend_mood_cores(display_scores: list[tuple[str, float]], top_k: int = 3) -> str:
+    """Weight-merge mood musical cores when the classifier is uncertain."""
+    chunks: list[str] = []
+    for mood, score in display_scores[:top_k]:
+        if score < 0.12:
+            continue
+        core = MOOD_MUSIC_CORE.get(mood, MOOD_MUSIC_CORE["neutral"])
+        if score >= 0.45:
+            chunks.append(core)
+        else:
+            # Lighter touch for secondary moods
+            chunks.append(core.split(",")[0].strip())
+    if not chunks:
+        return MOOD_MUSIC_CORE["neutral"]
+    return ", ".join(dict.fromkeys(chunks))
+
+
+def build_music_prompt(
+    caption: str,
+    display_scores: list[tuple[str, float]],
+    user_text: str,
+) -> str:
+    """
+    MusicGen prompt from real signals (no extra LLM):
+    - P2 score distribution (not only top label)
+    - P1 scene caption + keyword hints
+    - User reel text hints
+    """
+    parts: list[str] = [
+        _blend_mood_cores(display_scores),
+        "instagram reel background music",
+        "professional mix",
+    ]
+
+    cap = caption.strip()
+    if cap:
+        parts.append(f"scene: {cap}")
+        parts.extend(_hints_from_text(cap, SCENE_MUSIC_HINTS))
+
+    text = user_text.strip()
+    if text:
+        parts.append(f"story: {text}")
+        parts.extend(_hints_from_text(text, USER_TEXT_HINTS))
+
+    # De-dupe while keeping order; cap length for MusicGen
+    seen: set[str] = set()
+    unique: list[str] = []
+    for p in parts:
+        key = p.lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(p)
+    prompt = ", ".join(unique)
+    words = prompt.split()
+    if len(words) > 55:
+        prompt = " ".join(words[:55])
+    return prompt
 
 
 # ── PAGE ─────────────────────────────────────────────────────────────────────
@@ -235,6 +309,17 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# Sidebar control: MusicGen length (local backend)
+# MusicGen uses ~50 tokens/sec at 32kHz; we map seconds -> max_new_tokens.
+music_seconds = st.sidebar.slider(
+    "Music length (seconds)",
+    min_value=4,
+    max_value=20,
+    value=8,
+    step=1,
+)
+music_max_new_tokens = int(music_seconds * 50)
+
 with st.form("vibesound_input", border=True):
     st.markdown("**Upload once, then generate**")
     col_photo, col_text = st.columns(2)
@@ -266,7 +351,7 @@ if submitted:
 
     st.markdown("---")
     st.markdown(
-        f'<p class="step-label">★ Pipeline 1 — {IMAGE_CAPTION_MODEL}</p>',
+        f'<p class="step-label">★ Pipeline 1 — {CAPTION_MODEL_LABEL}</p>',
         unsafe_allow_html=True,
     )
     with st.spinner("Reading your photo..."):
@@ -312,12 +397,12 @@ if submitted:
             top3 = {k.capitalize(): round(v, 3) for k, v in display_scores[:3]}
             st.bar_chart(top3, height=100)
 
-    st.markdown('<p class="step-label">★ Pipeline 3 — flan-t5-small</p>', unsafe_allow_html=True)
+    st.markdown(
+        f'<p class="step-label">★ Pipeline 3 — {PROMPT_BUILDER_LABEL}</p>',
+        unsafe_allow_html=True,
+    )
     with st.spinner("Building music prompt..."):
-        try:
-            music_prompt = run_prompt_builder(caption, top_mood)
-        except Exception:
-            music_prompt = MOOD_FALLBACK.get(top_mood, "calm ambient music")
+        music_prompt = build_music_prompt(caption, display_scores, user_text)
 
     st.markdown(
         f'<div class="prompt-box">🎼 Music prompt: {music_prompt}</div>',
@@ -329,10 +414,15 @@ if submitted:
         f'<p class="step-label">Music — MusicGen (`{MUSICGEN_MODEL}`)</p>',
         unsafe_allow_html=True,
     )
-    st.caption(f"Backend: **{backend_hint}** (set `VIBESOUND_MUSIC_BACKEND=local|space|auto`)")
+    st.caption(
+        f"Backend: **{backend_hint}** · length: **{music_seconds}s** "
+        f"(set `VIBESOUND_MUSIC_BACKEND=local|space|auto`)"
+    )
     with st.spinner("Composing music (1–3 min on first run)..."):
         try:
-            audio_bytes, backend_used = generate_music(music_prompt, hf_token)
+            audio_bytes, backend_used = generate_music(
+                music_prompt, hf_token, max_new_tokens=music_max_new_tokens
+            )
         except Exception as e:
             st.error(f"Music generation failed: {e}")
             st.info(
@@ -365,9 +455,9 @@ if submitted:
 
 with st.sidebar:
     st.markdown("### 🔬 Architecture")
-    st.success(f"**P1** `{IMAGE_CAPTION_MODEL}`")
+    st.success(f"**P1** {CAPTION_MODEL_LABEL}")
     st.success(f"**P2** `{FINETUNED_MODEL if USE_FINETUNED_MODEL else PLACEHOLDER_MODEL}`")
-    st.success("**P3** flan-t5 (local)")
+    st.success(f"**P3** {PROMPT_BUILDER_LABEL}")
     cuda = torch.cuda.is_available()
     mb = resolve_backend()
     st.success(f"**Music** backend=`{mb}` · CUDA=`{cuda}`")
