@@ -15,8 +15,8 @@ from PIL import Image
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
-    BlipForConditionalGeneration,
-    BlipProcessor,
+    ViTImageProcessor,
+    VisionEncoderDecoderModel,
     pipeline,
 )
 
@@ -29,7 +29,7 @@ QUANTIZE_MOOD_MODEL = True
 PLACEHOLDER_MODEL = "bhadresh-savani/distilbert-base-uncased-emotion"
 FINETUNED_MODEL = "MelodyWEN7/vibesound-music-mood-classifier"
 
-BLIP_MODEL = "Salesforce/blip-image-captioning-base"
+IMAGE_CAPTION_MODEL = "nlpconnect/vit-gpt2-image-captioning"
 FLANT5_MODEL = "google/flan-t5-small"
 
 PLACEHOLDER_REMAP = {
@@ -97,20 +97,27 @@ def normalise_mood(label: str) -> str:
 
 
 @torch.inference_mode()
-def run_blip(image: Image.Image) -> str:
+def run_image_caption(image: Image.Image) -> str:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.float16 if device == "cuda" else torch.float32
-    processor = BlipProcessor.from_pretrained(BLIP_MODEL)
-    model = BlipForConditionalGeneration.from_pretrained(
-        BLIP_MODEL,
+    processor = ViTImageProcessor.from_pretrained(IMAGE_CAPTION_MODEL)
+    tokenizer = AutoTokenizer.from_pretrained(IMAGE_CAPTION_MODEL)
+    model = VisionEncoderDecoderModel.from_pretrained(
+        IMAGE_CAPTION_MODEL,
         torch_dtype=dtype,
         low_cpu_mem_usage=True,
     ).to(device)
     model.eval()
-    inputs = processor(image, return_tensors="pt").to(device)
-    out = model.generate(**inputs, max_new_tokens=50)
-    caption = processor.decode(out[0], skip_special_tokens=True)
-    _free(model, processor, inputs, out)
+    pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(
+        device=device, dtype=dtype
+    )
+    out = model.generate(
+        pixel_values,
+        max_length=50,
+        num_beams=4,
+    )
+    caption = tokenizer.decode(out[0], skip_special_tokens=True)
+    _free(model, processor, tokenizer, pixel_values, out)
     return caption
 
 
@@ -258,10 +265,13 @@ if submitted:
     hf_token = get_hf_token()
 
     st.markdown("---")
-    st.markdown('<p class="step-label">★ Pipeline 1 — BLIP</p>', unsafe_allow_html=True)
+    st.markdown(
+        f'<p class="step-label">★ Pipeline 1 — {IMAGE_CAPTION_MODEL}</p>',
+        unsafe_allow_html=True,
+    )
     with st.spinner("Reading your photo..."):
         try:
-            caption = run_blip(image)
+            caption = run_image_caption(image)
         except Exception as e:
             st.error(f"Image captioning failed: {e}")
             caption = "a scenic photo"
@@ -355,7 +365,7 @@ if submitted:
 
 with st.sidebar:
     st.markdown("### 🔬 Architecture")
-    st.success("**P1** BLIP (local)")
+    st.success(f"**P1** `{IMAGE_CAPTION_MODEL}`")
     st.success(f"**P2** `{FINETUNED_MODEL if USE_FINETUNED_MODEL else PLACEHOLDER_MODEL}`")
     st.success("**P3** flan-t5 (local)")
     cuda = torch.cuda.is_available()
