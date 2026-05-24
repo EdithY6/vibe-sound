@@ -25,6 +25,14 @@ from transformers import (
 )
 
 from music_gen import MUSICGEN_MODEL, generate_music, resolve_backend
+from ui_theme import (
+    PAGE_CONFIG,
+    info_card,
+    inject_day_theme,
+    mood_badge,
+    render_hero,
+    render_sidebar_footer,
+)
 
 # ── CONFIG ───────────────────────────────────────────────────────────────────
 USE_FINETUNED_MODEL = True
@@ -281,157 +289,116 @@ def build_music_prompt(
 
 
 # ── PAGE ─────────────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="VibeSound — Reel Music Generator (CLAP)",
-    page_icon="🎵",
-    layout="centered",
-)
-
-st.markdown(
-    """
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&display=swap');
-    html, body, [class*="css"] { font-family: 'Space Grotesk', sans-serif; }
-    .stApp { background: linear-gradient(135deg, #0D0D0D 0%, #1A0A2E 100%); }
-    .title-text { font-size: 2.6rem; font-weight: 700;
-                  background: linear-gradient(90deg, #E91E8C, #FF6B35);
-                  -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .subtitle { color: #aaa; font-size: 1rem; margin-top: -8px; }
-    .step-label { color: #888; font-size: 0.8rem; font-weight: 600;
-                  text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
-    .caption-box { color: #eee; font-style: italic; font-size: 1rem; padding: 12px;
-                   background: rgba(255,255,255,0.04);
-                   border-left: 3px solid #E91E8C; border-radius: 4px; }
-    .prompt-box { color: #eee; font-size: 0.95rem; padding: 12px;
-                  background: rgba(255,255,255,0.04);
-                  border-left: 3px solid #FF6B35; border-radius: 4px; }
-    .mood-badge { display: inline-block; padding: 6px 18px; border-radius: 30px;
-                  font-weight: 600; font-size: 1rem; color: #fff; }
-</style>
-""",
-    unsafe_allow_html=True,
-)
-
-st.markdown('<p class="title-text">🎵 VibeSound</p>', unsafe_allow_html=True)
-st.markdown(
-    '<p class="subtitle">CLAP-tag prompt builder · UST server</p>',
-    unsafe_allow_html=True,
-)
+st.set_page_config(**PAGE_CONFIG)
+inject_day_theme()
+render_hero()
 
 music_seconds = st.sidebar.slider(
-    "Music length (seconds)",
+    "Track length (seconds)",
     min_value=4,
     max_value=20,
     value=8,
     step=1,
+    help="Shorter = faster to generate.",
 )
 music_max_new_tokens = int(music_seconds * 50)
 
-with st.form("vibesound_input", border=True):
-    st.markdown("**Upload once, then generate**")
-    col_photo, col_text = st.columns(2)
+with st.form("vibesound_input", border=False):
+    col_photo, col_text = st.columns([1, 1], gap="large")
     with col_photo:
-        uploaded = st.file_uploader("Reel photo", type=["jpg", "jpeg", "png"])
-    with col_text:
-        user_text = st.text_area(
-            "How are you feeling? (optional)",
-            placeholder="e.g. best day ever with my girls",
-            height=120,
+        st.markdown("##### 📷 Your Reel photo")
+        uploaded = st.file_uploader(
+            "Choose an image",
+            type=["jpg", "jpeg", "png"],
+            label_visibility="collapsed",
+            help="A clear photo of your scene works best.",
         )
+        if uploaded is not None:
+            preview = Image.open(uploaded).convert("RGB")
+            st.image(preview, use_container_width=True)
+    with col_text:
+        st.markdown("##### ✏️ Caption (optional)")
+        user_text = st.text_area(
+            "Caption",
+            placeholder="e.g. Best sunset with friends — chill summer vibes",
+            height=160,
+            label_visibility="collapsed",
+            help="Helps set mood. Leave empty for a calm neutral feel.",
+        )
+        st.caption("No caption? We still read your photo; mood defaults to **neutral**.")
     submitted = st.form_submit_button(
-        "🎵 Generate Background Music",
+        "Generate my background music",
         type="primary",
         use_container_width=True,
     )
 
-if uploaded is not None:
-    preview = Image.open(uploaded).convert("RGB")
-    st.image(preview, caption="Preview", width=280)
-
 if submitted:
     if uploaded is None:
-        st.error("Please upload a reel photo first.")
+        st.warning("Please upload a Reel photo first, then tap **Generate**.")
         st.stop()
 
     image = Image.open(uploaded).convert("RGB")
     hf_token = get_hf_token()
 
     st.markdown("---")
-    st.markdown(
-        f'<p class="step-label">★ Pipeline 1 — {CAPTION_MODEL_LABEL}</p>',
-        unsafe_allow_html=True,
-    )
-    with st.spinner("Reading your photo..."):
+    st.subheader("Your results")
+
+    with st.status("Creating your track…", expanded=True) as status:
+        st.write("Reading your photo…")
         caption = run_image_caption(image)
-    st.markdown(f'<div class="caption-box">📝 Scene: {caption}</div>', unsafe_allow_html=True)
+        info_card("What we see in your photo", caption, variant="scene")
 
-    mood_label = FINETUNED_MODEL if USE_FINETUNED_MODEL else PLACEHOLDER_MODEL
-    st.markdown(
-        f'<p class="step-label">★ Pipeline 2 — {mood_label}</p>',
-        unsafe_allow_html=True,
-    )
-    with st.spinner("Detecting mood..."):
+        st.write("Understanding your vibe…")
         top_mood, top_score, display_scores = run_mood(user_text)
+        emoji = MOOD_EMOJI.get(top_mood, "🎶")
+        color = MOOD_COLOR.get(top_mood, "#888888")
 
-    emoji = MOOD_EMOJI.get(top_mood, "🎶")
-    color = MOOD_COLOR.get(top_mood, "#888")
-    col_mood, col_chart = st.columns([1, 2])
-    with col_mood:
-        st.markdown(
-            f'<div class="mood-badge" style="background:{color};">'
-            f"{emoji} {top_mood.capitalize()}</div>",
-            unsafe_allow_html=True,
-        )
-        st.caption(f"Confidence: {top_score * 100:.1f}%")
-    with col_chart:
-        if user_text.strip():
-            top3 = {k.capitalize(): round(v, 3) for k, v in display_scores[:3]}
-            st.bar_chart(top3, height=100)
+        mood_col, detail_col = st.columns([1, 2])
+        with mood_col:
+            mood_badge(emoji, top_mood, color)
+            if user_text.strip():
+                st.caption(f"Mood confidence: {top_score * 100:.0f}%")
+            else:
+                st.caption("No caption — using **neutral** mood. Add text next time to steer feel.")
+        with detail_col:
+            if user_text.strip():
+                top3 = {k.capitalize(): round(v, 3) for k, v in display_scores[:3]}
+                st.bar_chart(top3, height=120)
+            else:
+                st.info("Tip: add a short caption to personalize mood and music style.")
 
-    st.markdown(
-        f'<p class="step-label">★ Pipeline 3 — {PROMPT_BUILDER_LABEL}</p>',
-        unsafe_allow_html=True,
-    )
-    with st.spinner("Ranking music tags..."):
+        st.write("Picking music style (CLAP)…")
         music_prompt, top_tags = build_music_prompt(caption, display_scores, user_text)
+        info_card("Music style prompt", music_prompt, variant="prompt")
+        with st.expander("Style tags we matched"):
+            tag_labels = [f"{t} ({s:.2f})" for t, s in top_tags[:8]]
+            st.write(", ".join(tag_labels) if tag_labels else "—")
 
-    st.markdown(
-        f'<div class="prompt-box">🎼 Music prompt: {music_prompt}</div>',
-        unsafe_allow_html=True,
-    )
-    with st.expander("Debug: top CLAP tags"):
-        st.write(top_tags)
-
-    backend_hint = resolve_backend()
-    st.markdown(
-        f'<p class="step-label">Music — MusicGen (`{MUSICGEN_MODEL}`)</p>',
-        unsafe_allow_html=True,
-    )
-    st.caption(
-        f"Backend: **{backend_hint}** · length: **{music_seconds}s** "
-        f"(set `VIBESOUND_MUSIC_BACKEND=local|space|auto`)"
-    )
-    with st.spinner("Composing music..."):
+        st.write(f"Composing ~{music_seconds}s of music…")
         audio_bytes, backend_used = generate_music(
             music_prompt, hf_token, max_new_tokens=music_max_new_tokens
         )
+        status.update(label="Done — your track is ready", state="complete")
 
-    st.success(f"✅ Ready — music via {backend_used}")
+    st.success("Your background music is ready.")
     st.audio(audio_bytes, format="audio/wav")
     st.download_button(
-        label="⬇️ Download Music (.wav)",
+        label="Download WAV",
         data=audio_bytes,
         file_name=f"vibesound_{top_mood}.wav",
         mime="audio/wav",
+        type="primary",
+        use_container_width=True,
     )
 
-with st.sidebar:
-    st.markdown("### 🔬 Architecture")
-    st.success(f"**P1** {CAPTION_MODEL_LABEL}")
-    st.success(f"**P2** `{FINETUNED_MODEL if USE_FINETUNED_MODEL else PLACEHOLDER_MODEL}`")
-    st.success(f"**P3** {PROMPT_BUILDER_LABEL}")
-    cuda = torch.cuda.is_available()
-    mb = resolve_backend()
-    st.success(f"**Music** backend=`{mb}` · CUDA=`{cuda}`")
-    st.caption(f"CUDA: `{cuda}` · device count: `{torch.cuda.device_count() if cuda else 0}`")
+cuda = torch.cuda.is_available()
+mb = resolve_backend()
+mood_model = FINETUNED_MODEL if USE_FINETUNED_MODEL else PLACEHOLDER_MODEL
+render_sidebar_footer(
+    p1_label=CAPTION_MODEL_LABEL,
+    p2_model=mood_model,
+    p3_label="CLAP music tags",
+    music_backend=mb,
+    cuda=cuda,
+)
 
