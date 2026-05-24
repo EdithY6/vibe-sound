@@ -1,6 +1,6 @@
 # VibeSound — UST server deploy (Option A)
 
-Streamlit app for ISOM5240: BLIP → mood classifier → flan-t5 → MusicGen.
+Streamlit app for ISOM5240: ViT-GPT2 caption → mood classifier → context-aware prompt → MusicGen.
 
 Designed for **JupyterLab on `imz250.ust.hk`** (more RAM than Streamlit Cloud 1GB).
 
@@ -12,8 +12,8 @@ cd vibesound
 cp .env.example .env
 # edit .env → set HF_TOKEN=hf_...
 
-bash scripts/setup.sh
-bash scripts/run.sh
+bash setup.sh
+bash run.sh
 ```
 
 Open in browser (Jupyter proxy — adjust port if needed):
@@ -48,8 +48,8 @@ python -c "import torch; print(torch.cuda.is_available())"
 | `app.py` | Streamlit UI + pipelines 1–3 |
 | `music_gen.py` | Local MusicGen or Gradio 3 Space |
 | `requirements.txt` | Python deps |
-| `scripts/setup.sh` | venv + pip install |
-| `scripts/run.sh` | start Streamlit |
+| `setup.sh` | venv + pip install |
+| `run.sh` | start Streamlit |
 
 ## Assignment note
 
