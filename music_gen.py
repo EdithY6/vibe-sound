@@ -184,12 +184,17 @@ def resolve_backend() -> str:
     return "space"
 
 
-def generate_music(prompt: str, hf_token: str = "") -> tuple[bytes, str]:
+def generate_music(
+    prompt: str, hf_token: str = "", max_new_tokens: int = 256
+) -> tuple[bytes, str]:
     """Returns (wav_bytes, backend_label)."""
     backend = resolve_backend()
     if backend == "local":
         try:
-            return generate_music_local(prompt), f"local `{MUSICGEN_MODEL}`"
+            return (
+                generate_music_local(prompt, max_new_tokens=max_new_tokens),
+                f"local `{MUSICGEN_MODEL}`",
+            )
         except Exception as e:
             if MUSIC_BACKEND == "local":
                 raise
