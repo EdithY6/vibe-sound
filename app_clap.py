@@ -387,6 +387,10 @@ if submitted:
         mime=audio_mime,
         **wide_button_kwargs(),
     )
+    st.caption(
+        "🎬 Your track is ready — drop it into CapCut, Instagram Reels, or TikTok "
+        "and make your own vibe reel now."
+    )
 
 cuda = torch.cuda.is_available()
 mb = resolve_backend()
