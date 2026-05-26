@@ -17,7 +17,15 @@ MUSICGEN_MODEL = os.environ.get("MUSICGEN_MODEL", "facebook/musicgen-small")
 MUSICGEN_SPACE_URL = "https://facebook-musicgen.hf.space"
 MUSIC_BACKEND = os.environ.get("VIBESOUND_MUSIC_BACKEND", "auto")  # auto | local | space
 # mp4 = AAC in .mp4 (Reel-friendly); wav = raw WAV fallback if ffmpeg missing
-AUDIO_FORMAT = os.environ.get("VIBESOUND_AUDIO_FORMAT", "mp4").lower()
+_last_package_error: str = ""
+
+
+def audio_format() -> str:
+    return os.environ.get("VIBESOUND_AUDIO_FORMAT", "mp4").lower()
+
+
+def last_package_error() -> str:
+    return _last_package_error
 
 
 def resolve_ffmpeg() -> str | None:
@@ -203,52 +211,69 @@ def generate_music_space(prompt: str, token: str | None) -> bytes:
 
 
 def wav_bytes_to_mp4(wav_bytes: bytes) -> bytes:
-    """Encode WAV bytes to MP4 (AAC). Requires ffmpeg on PATH."""
+    """Encode WAV bytes to MP4 (AAC). Uses temp files (more reliable than pipes)."""
+    import tempfile
+
     ffmpeg = resolve_ffmpeg()
     if not ffmpeg:
         raise RuntimeError(
             "ffmpeg not found — run bash deploy.sh or set FFMPEG_PATH in .env"
         )
-    proc = subprocess.run(
-        [
-            ffmpeg,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-f",
-            "wav",
-            "-i",
-            "pipe:0",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-movflags",
-            "+faststart",
-            "-f",
-            "mp4",
-            "pipe:1",
-        ],
-        input=wav_bytes,
-        capture_output=True,
-        timeout=120,
-        check=False,
-    )
-    if proc.returncode != 0:
-        err = (proc.stderr or b"").decode(errors="replace")[:400]
-        raise RuntimeError(f"ffmpeg failed: {err or proc.returncode}")
-    if not proc.stdout:
-        raise RuntimeError("ffmpeg produced empty MP4")
-    return proc.stdout
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as wf:
+        wav_path = wf.name
+        wf.write(wav_bytes)
+    out_path = wav_path.replace(".wav", ".mp4")
+    try:
+        proc = subprocess.run(
+            [
+                ffmpeg,
+                "-nostdin",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-i",
+                wav_path,
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                "-movflags",
+                "+faststart",
+                out_path,
+            ],
+            capture_output=True,
+            timeout=120,
+            check=False,
+        )
+        if proc.returncode != 0:
+            err = (proc.stderr or b"").decode(errors="replace")[:500]
+            raise RuntimeError(f"ffmpeg failed: {err or proc.returncode}")
+        mp4_bytes = Path(out_path).read_bytes()
+        if not mp4_bytes:
+            raise RuntimeError("ffmpeg produced empty MP4")
+        return mp4_bytes
+    finally:
+        for p in (wav_path, out_path):
+            try:
+                Path(p).unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def package_audio(wav_bytes: bytes) -> tuple[bytes, str, str]:
     """Return (bytes, file_extension, mime_type)."""
-    if AUDIO_FORMAT != "mp4":
+    global _last_package_error
+    _last_package_error = ""
+
+    if audio_format() != "mp4":
+        _last_package_error = f"VIBESOUND_AUDIO_FORMAT={audio_format()}"
         return wav_bytes, "wav", "audio/wav"
     try:
         return wav_bytes_to_mp4(wav_bytes), "mp4", "audio/mp4"
-    except Exception:
+    except Exception as exc:
+        _last_package_error = str(exc)
         return wav_bytes, "wav", "audio/wav"
 
 

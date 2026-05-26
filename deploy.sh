@@ -101,6 +101,7 @@ ensure_ffmpeg() {
   if command -v ffmpeg >/dev/null 2>&1 && ffmpeg -version >/dev/null 2>&1; then
     echo ">> ffmpeg OK: $(command -v ffmpeg)"
     set_env_kv "FFMPEG_PATH" "$(command -v ffmpeg)"
+    set_env_kv "VIBESOUND_AUDIO_FORMAT" "mp4"
     export FFMPEG_PATH
     return 0
   fi
@@ -113,6 +114,7 @@ ensure_ffmpeg() {
   fi
   if command -v ffmpeg >/dev/null 2>&1 && ffmpeg -version >/dev/null 2>&1; then
     set_env_kv "FFMPEG_PATH" "$(command -v ffmpeg)"
+    set_env_kv "VIBESOUND_AUDIO_FORMAT" "mp4"
     export FFMPEG_PATH
     echo ">> ffmpeg OK after conda: $FFMPEG_PATH"
     return 0
@@ -124,6 +126,7 @@ ensure_ffmpeg() {
   fi
   if command -v ffmpeg >/dev/null 2>&1 && ffmpeg -version >/dev/null 2>&1; then
     set_env_kv "FFMPEG_PATH" "$(command -v ffmpeg)"
+    set_env_kv "VIBESOUND_AUDIO_FORMAT" "mp4"
     export FFMPEG_PATH
     echo ">> ffmpeg OK after apt: $FFMPEG_PATH"
     return 0
@@ -149,6 +152,7 @@ ensure_ffmpeg() {
     export PATH="$FDIR:$PATH"
     export FFMPEG_PATH="$FDIR/ffmpeg"
     set_env_kv "FFMPEG_PATH" "$FFMPEG_PATH"
+    set_env_kv "VIBESOUND_AUDIO_FORMAT" "mp4"
     echo ">> ffmpeg OK (static): $FFMPEG_PATH"
     return 0
   fi

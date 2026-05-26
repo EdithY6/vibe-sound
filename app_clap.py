@@ -24,7 +24,7 @@ from transformers import (
     pipeline,
 )
 
-from music_gen import MUSICGEN_MODEL, generate_music, resolve_backend
+from music_gen import MUSICGEN_MODEL, generate_music, last_package_error, resolve_backend
 from ui_theme import (
     PAGE_CONFIG,
     get_hf_token,
@@ -376,7 +376,9 @@ if submitted:
     audio_mime = "audio/mp4" if audio_ext == "mp4" else "audio/wav"
     st.success("Your background music is ready.")
     if audio_ext != "mp4":
-        st.caption("MP4 export needs `ffmpeg` on the server — downloaded as WAV this time.")
+        hint = last_package_error() or "unknown"
+        st.warning(f"MP4 export failed — offering WAV. Reason: {hint}")
+        st.caption("Fix: `grep VIBESOUND_AUDIO_FORMAT .env` → should be `mp4`, then restart Streamlit.")
     st.audio(audio_bytes, format=audio_mime)
     st.download_button(
         label="Download MP4" if audio_ext == "mp4" else "Download WAV",
