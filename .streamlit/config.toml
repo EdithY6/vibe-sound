@@ -1,8 +1,14 @@
+[theme]
+base = "light"
+primaryColor = "#DB2777"
+backgroundColor = "#FAFBFC"
+secondaryBackgroundColor = "#F1F5F9"
+textColor = "#0F172A"
+font = "sans serif"
+
 [server]
 headless = true
-port = 8501
-address = "0.0.0.0"
-enableCORS = false
+enableCORS = true
 enableXsrfProtection = false
 maxUploadSize = 20
 
