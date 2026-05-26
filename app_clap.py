@@ -32,6 +32,8 @@ from ui_theme import (
     mood_badge,
     render_hero,
     render_sidebar_footer,
+    wide_button_kwargs,
+    wide_image_kwargs,
 )
 
 # ── CONFIG ───────────────────────────────────────────────────────────────────
@@ -303,8 +305,8 @@ music_seconds = st.sidebar.slider(
 )
 music_max_new_tokens = int(music_seconds * 50)
 
-with st.form("vibesound_input", border=False):
-    col_photo, col_text = st.columns([1, 1], gap="large")
+with st.form("vibesound_input"):
+    col_photo, col_text = st.columns(2)
     with col_photo:
         st.markdown("##### 📷 Your Reel photo")
         uploaded = st.file_uploader(
@@ -315,7 +317,7 @@ with st.form("vibesound_input", border=False):
         )
         if uploaded is not None:
             preview = Image.open(uploaded).convert("RGB")
-            st.image(preview, use_container_width=True)
+            st.image(preview, **wide_image_kwargs())
     with col_text:
         st.markdown("##### ✏️ Caption (optional)")
         user_text = st.text_area(
@@ -328,8 +330,7 @@ with st.form("vibesound_input", border=False):
         st.caption("No caption? We still read your photo; mood defaults to **neutral**.")
     submitted = st.form_submit_button(
         "Generate my background music",
-        type="primary",
-        use_container_width=True,
+        **wide_button_kwargs(),
     )
 
 if submitted:
@@ -390,8 +391,7 @@ if submitted:
         data=audio_bytes,
         file_name=f"vibesound_{top_mood}.{audio_ext}",
         mime=audio_mime,
-        type="primary",
-        use_container_width=True,
+        **wide_button_kwargs(),
     )
 
 cuda = torch.cuda.is_available()

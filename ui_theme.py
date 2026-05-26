@@ -4,6 +4,23 @@ from __future__ import annotations
 import html
 
 import streamlit as st
+from packaging import version
+
+_ST_VER = version.parse(st.__version__)
+
+
+def wide_image_kwargs() -> dict:
+    """Streamlit <1.40 uses use_column_width; >=1.40 uses use_container_width."""
+    if _ST_VER >= version.parse("1.40"):
+        return {"use_container_width": True}
+    return {"use_column_width": True}
+
+
+def wide_button_kwargs() -> dict:
+    if _ST_VER >= version.parse("1.40"):
+        return {"use_container_width": True}
+    return {}
+
 
 PAGE_CONFIG = {
     "page_title": "VibeSound — Reel Music",

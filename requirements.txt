@@ -1,5 +1,6 @@
 # UST JupyterLab / GPU server (Option A)
-streamlit>=1.32
+# Pin <1.40: Streamlit 1.57+ (uvicorn) often blank-pages behind trycloudflare
+streamlit>=1.32.0,<1.40.0
 torch>=2.2.0
 transformers==4.46.3
 accelerate>=1.2.1
@@ -10,6 +11,6 @@ Pillow>=10.0.0
 sentencepiece>=0.2.0
 scipy>=1.11.0
 protobuf>=4.25.0
-numpy
-datasets
-sentence-transformers
+numpy>=1.26.0
+datasets>=2.19.0
+sentence-transformers>=3.0.0
