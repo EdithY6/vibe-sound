@@ -27,6 +27,7 @@ from transformers import (
 from music_gen import MUSICGEN_MODEL, generate_music, resolve_backend
 from ui_theme import (
     PAGE_CONFIG,
+    get_hf_token,
     info_card,
     inject_day_theme,
     mood_badge,
@@ -139,16 +140,6 @@ MOOD_COLOR = {
     "surprised": "#FF6B35",
     "neutral": "#888888",
 }
-
-
-def get_hf_token() -> str:
-    try:
-        token = st.secrets.get("HF_TOKEN", "")
-        if token:
-            return token
-    except (FileNotFoundError, KeyError):
-        pass
-    return os.environ.get("HF_TOKEN", "")
 
 
 def _free(*objs) -> None:
@@ -371,15 +362,16 @@ if submitted:
         st.write("Picking music style (CLAP)…")
         music_prompt, top_tags = build_music_prompt(caption, display_scores, user_text)
         info_card("Music style prompt", music_prompt, variant="prompt")
-        with st.expander("Style tags we matched"):
-            tag_labels = [f"{t} ({s:.2f})" for t, s in top_tags[:8]]
-            st.write(", ".join(tag_labels) if tag_labels else "—")
 
         st.write(f"Composing ~{music_seconds}s of music…")
         audio_bytes, backend_used, audio_ext = generate_music(
             music_prompt, hf_token, max_new_tokens=music_max_new_tokens
         )
         status.update(label="Done — your track is ready", state="complete")
+
+    with st.expander("Style tags we matched"):
+        tag_labels = [f"{t} ({s:.2f})" for t, s in top_tags[:8]]
+        st.write(", ".join(tag_labels) if tag_labels else "—")
 
     audio_mime = "audio/mp4" if audio_ext == "mp4" else "audio/wav"
     st.success("Your background music is ready.")

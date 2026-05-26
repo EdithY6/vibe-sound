@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import html
+import os
+from pathlib import Path
 
 import streamlit as st
 from packaging import version
@@ -91,6 +93,20 @@ def inject_day_theme() -> None:
 
 def esc(text: str) -> str:
     return html.escape(str(text))
+
+
+def get_hf_token() -> str:
+    """HF token from env (.env / deploy.sh). Avoids st.secrets unless secrets.toml exists."""
+    token = os.environ.get("HF_TOKEN", "").strip()
+    if token:
+        return token
+    secrets_file = Path(__file__).resolve().parent / ".streamlit" / "secrets.toml"
+    if secrets_file.is_file():
+        try:
+            return str(st.secrets["HF_TOKEN"]).strip()
+        except (KeyError, TypeError, FileNotFoundError):
+            pass
+    return ""
 
 
 def render_hero() -> None:

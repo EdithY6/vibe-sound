@@ -4,7 +4,7 @@
 set -euo pipefail
 
 # ================== EDIT ==================
-HF_TOKEN="${HF_TOKEN:-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}"
+HF_TOKEN="${HF_TOKEN:-hf_PASTE_YOUR_TOKEN_HERE}"
 APP_FILE="${APP_FILE:-app_clap.py}"
 PORT="${PORT:-8503}"
 # ==========================================
@@ -20,6 +20,7 @@ if [ ! -d "$REPO_DIR/.git" ]; then
   git clone "$REPO_URL" "$REPO_DIR"
 fi
 cd "$REPO_DIR"
+echo ">> git fetch + reset --hard origin/main (discards local changes)"
 git fetch origin
 git reset --hard origin/main
 
@@ -84,6 +85,14 @@ set -a
 # shellcheck disable=SC1091
 source .env
 set +a
+
+# Streamlit secrets (optional; stops "No secrets found" if app reads st.secrets)
+mkdir -p .streamlit
+HF_VAL=$(grep '^HF_TOKEN=' .env | cut -d= -f2- | tr -d '\r')
+cat > .streamlit/secrets.toml <<EOF
+HF_TOKEN = "$HF_VAL"
+EOF
+chmod 600 .streamlit/secrets.toml 2>/dev/null || true
 
 python -c "import ui_theme; print('ui_theme ok')"
 
