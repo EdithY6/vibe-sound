@@ -4,7 +4,7 @@
 set -euo pipefail
 
 # ================== EDIT ==================
-HF_TOKEN="${HF_TOKEN:-hf_PASTE_YOUR_TOKEN_HERE}"
+HF_TOKEN="${HF_TOKEN:-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}"
 APP_FILE="${APP_FILE:-app_clap.py}"
 PORT="${PORT:-8503}"
 # ==========================================
