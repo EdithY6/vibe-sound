@@ -20,6 +20,30 @@ MUSIC_BACKEND = os.environ.get("VIBESOUND_MUSIC_BACKEND", "auto")  # auto | loca
 AUDIO_FORMAT = os.environ.get("VIBESOUND_AUDIO_FORMAT", "mp4").lower()
 
 
+def resolve_ffmpeg() -> str | None:
+    """Path to ffmpeg binary (FFMPEG_PATH env, then PATH)."""
+    custom = os.environ.get("FFMPEG_PATH", "").strip()
+    if custom and Path(custom).is_file():
+        return custom
+    return shutil.which("ffmpeg")
+
+
+def ffmpeg_available() -> bool:
+    exe = resolve_ffmpeg()
+    if not exe:
+        return False
+    try:
+        proc = subprocess.run(
+            [exe, "-version"],
+            capture_output=True,
+            timeout=15,
+            check=False,
+        )
+        return proc.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def _read_audio_result(result) -> bytes:
     if isinstance(result, (list, tuple)):
         for item in result:
@@ -180,11 +204,14 @@ def generate_music_space(prompt: str, token: str | None) -> bytes:
 
 def wav_bytes_to_mp4(wav_bytes: bytes) -> bytes:
     """Encode WAV bytes to MP4 (AAC). Requires ffmpeg on PATH."""
-    if not shutil.which("ffmpeg"):
-        raise RuntimeError("ffmpeg not found — install ffmpeg or set VIBESOUND_AUDIO_FORMAT=wav")
+    ffmpeg = resolve_ffmpeg()
+    if not ffmpeg:
+        raise RuntimeError(
+            "ffmpeg not found — run bash deploy.sh or set FFMPEG_PATH in .env"
+        )
     proc = subprocess.run(
         [
-            "ffmpeg",
+            ffmpeg,
             "-hide_banner",
             "-loglevel",
             "error",

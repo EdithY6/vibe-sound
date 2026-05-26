@@ -81,9 +81,83 @@ if command -v nvidia-smi >/dev/null 2>&1; then
   fi
 fi
 
-if ! command -v ffmpeg >/dev/null 2>&1 && command -v conda >/dev/null 2>&1; then
-  conda install -y -c conda-forge ffmpeg 2>/dev/null || true
-fi
+# --- ffmpeg for MP4 export (conda / apt / static binary) ---
+set_env_kv() {
+  local key="$1" val="$2"
+  if grep -q "^${key}=" .env 2>/dev/null; then
+    sed -i "s|^${key}=.*|${key}=${val}|" .env
+  else
+    echo "${key}=${val}" >> .env
+  fi
+}
+
+ensure_ffmpeg() {
+  echo ">> Checking ffmpeg (MP4 export)..."
+  for d in "${CONDA_PREFIX:-}/bin" /opt/conda/bin "$HOME/miniconda3/bin" "$HOME/anaconda3/bin"; do
+    if [ -n "$d" ] && [ -x "$d/ffmpeg" ]; then
+      export PATH="$d:$PATH"
+    fi
+  done
+  if command -v ffmpeg >/dev/null 2>&1 && ffmpeg -version >/dev/null 2>&1; then
+    echo ">> ffmpeg OK: $(command -v ffmpeg)"
+    set_env_kv "FFMPEG_PATH" "$(command -v ffmpeg)"
+    export FFMPEG_PATH
+    return 0
+  fi
+  if command -v conda >/dev/null 2>&1; then
+    echo ">> Installing ffmpeg via conda-forge..."
+    conda install -y -c conda-forge ffmpeg || true
+    for d in "${CONDA_PREFIX:-}/bin" /opt/conda/bin; do
+      [ -x "$d/ffmpeg" ] && export PATH="$d:$PATH"
+    done
+  fi
+  if command -v ffmpeg >/dev/null 2>&1 && ffmpeg -version >/dev/null 2>&1; then
+    set_env_kv "FFMPEG_PATH" "$(command -v ffmpeg)"
+    export FFMPEG_PATH
+    echo ">> ffmpeg OK after conda: $FFMPEG_PATH"
+    return 0
+  fi
+  if command -v apt-get >/dev/null 2>&1; then
+    echo ">> Trying apt-get install ffmpeg..."
+    (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg) 2>/dev/null \
+      || apt-get install -y -qq ffmpeg 2>/dev/null || true
+  fi
+  if command -v ffmpeg >/dev/null 2>&1 && ffmpeg -version >/dev/null 2>&1; then
+    set_env_kv "FFMPEG_PATH" "$(command -v ffmpeg)"
+    export FFMPEG_PATH
+    echo ">> ffmpeg OK after apt: $FFMPEG_PATH"
+    return 0
+  fi
+  echo ">> Downloading static ffmpeg to /tmp/ffmpeg-vibesound ..."
+  FDIR="/tmp/ffmpeg-vibesound"
+  mkdir -p "$FDIR"
+  if [ ! -x "$FDIR/ffmpeg" ]; then
+    TARBALL="/tmp/ffmpeg-static.tar.xz"
+    if [ ! -f "$TARBALL" ]; then
+      curl -fsSL -o "$TARBALL" \
+        https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+    fi
+    EXTRACTED="$(find /tmp -maxdepth 1 -type d -name 'ffmpeg-*-amd64-static' 2>/dev/null | head -1)"
+    if [ -z "$EXTRACTED" ] || [ ! -x "$EXTRACTED/ffmpeg" ]; then
+      tar -xJf "$TARBALL" -C /tmp
+      EXTRACTED="$(find /tmp -maxdepth 1 -type d -name 'ffmpeg-*-amd64-static' 2>/dev/null | head -1)"
+    fi
+    cp "$EXTRACTED/ffmpeg" "$FDIR/ffmpeg"
+    chmod +x "$FDIR/ffmpeg"
+  fi
+  if [ -x "$FDIR/ffmpeg" ] && "$FDIR/ffmpeg" -version >/dev/null 2>&1; then
+    export PATH="$FDIR:$PATH"
+    export FFMPEG_PATH="$FDIR/ffmpeg"
+    set_env_kv "FFMPEG_PATH" "$FFMPEG_PATH"
+    echo ">> ffmpeg OK (static): $FFMPEG_PATH"
+    return 0
+  fi
+  echo "WARN: ffmpeg not available — downloads will be WAV only"
+  set_env_kv "VIBESOUND_AUDIO_FORMAT" "wav"
+  return 1
+}
+
+ensure_ffmpeg || true
 
 set -a
 # shellcheck disable=SC1091
@@ -99,6 +173,11 @@ EOF
 chmod 600 .streamlit/secrets.toml 2>/dev/null || true
 
 python -c "import ui_theme; print('ui_theme ok')"
+python -c "
+from music_gen import ffmpeg_available, resolve_ffmpeg
+print('FFMPEG_PATH', resolve_ffmpeg())
+print('ffmpeg_available', ffmpeg_available())
+"
 
 pkill -f "streamlit run" 2>/dev/null || true
 pkill -f cloudflared 2>/dev/null || true
