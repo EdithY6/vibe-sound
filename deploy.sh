@@ -1,7 +1,11 @@
 #!/bin/bash
 # VibeSound — fresh container → public https link (trycloudflare + Streamlit)
 # Edit HF_TOKEN below, then:  bash deploy.sh
-set -euo pipefail
+if grep -q $'\r' "$0" 2>/dev/null; then
+  sed -i 's/\r$//' "$0"
+  exec bash "$0" "$@"
+fi
+set -eu
 
 # ================== EDIT ==================
 HF_TOKEN="${HF_TOKEN:-hf_PASTE_YOUR_TOKEN_HERE}"
