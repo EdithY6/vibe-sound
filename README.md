@@ -1,4 +1,4 @@
-# VibeSound — School cloud server deploy (copy/paste)
+# VibeSound — School cloud server deploy
 
 Streamlit app that turns a **Reel photo (+ optional caption)** into **background music**.
 
