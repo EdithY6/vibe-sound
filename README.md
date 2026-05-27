@@ -20,6 +20,34 @@ Streamlit app that turns a **Reel photo (+ optional caption)** into **background
   - NVIDIA GPU + CUDA (faster local MusicGen)
   - `ffmpeg` (MP4/AAC download; otherwise WAV)
 
+## Repo structure (main)
+
+- `.streamlit/config.toml` — Streamlit theme + server flags (headless/CORS/XSRF/upload limit)
+- `.env.example` — env template (HF token + backend knobs). Copy to `.env` (don’t commit)
+- `.gitattributes` / `.gitignore` — git settings / ignored files
+- `LICENSE` — GPL-3.0
+- `README.md` — docs
+
+- `app_clap.py` — **Streamlit app entrypoint**
+  - UI: upload image + optional caption
+  - Runs pipeline: caption → mood → CLAP tags → MusicGen
+  - Calls `music_gen.generate_music()` and renders audio + download
+
+- `music_gen.py` — **music backend + audio packaging**
+  - Local MusicGen (`facebook/musicgen-small`) if CUDA / `VIBESOUND_MUSIC_BACKEND=local`
+  - HF Space fallback (`facebook/MusicGen`) if `space` / no CUDA
+  - WAV→MP4 (AAC) via ffmpeg if `VIBESOUND_AUDIO_FORMAT=mp4`, else WAV
+
+- `ui_theme.py` — UI CSS/components + `HF_TOKEN` loader (env first; optional `.streamlit/secrets.toml`)
+
+- `requirements.txt` — Python deps (Streamlit pinned `<1.40`)
+- `setup.sh` — creates `.venv`, installs torch + deps, tries to get ffmpeg, bootstraps `.env`
+- `deploy.sh` — server deploy: git reset to main, ensure `.env`, ensure ffmpeg, start tunnel + Streamlit, print trycloudflare URL
+
+- `test/` — misc test folder (not required for deployment)
+
+
+
 ## Hugging Face token (required)
 
 The mood classifier is gated:
