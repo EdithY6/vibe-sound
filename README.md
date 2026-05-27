@@ -178,7 +178,7 @@ echo ""
 
 wait "$CF_PID"
 ENDSCRIPT
-
+```
 
 ## Config knobs (`.env`)
 
