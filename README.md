@@ -47,15 +47,16 @@ The mood classifier is gated:
 ```env
 HF_TOKEN=hf_...
 
+---
 
-Run on school cloud server (copy/paste deploy)
+## Run on school cloud server (copy/paste deploy)
 Paste this into the server terminal, set HF_TOKEN, and it will:
 
-clone/update ~/vibe-sound
-create .env from .env.example + inject HF_TOKEN
-create .venv via setup.sh if missing
-start a trycloudflare.com tunnel to Streamlit
-print a public https://...trycloudflare.com URL
+- clone/update ~/vibe-sound
+- create .env from .env.example + inject HF_TOKEN
+- create .venv via setup.sh if missing
+- start a trycloudflare.com tunnel to Streamlit
+- print a public https://...trycloudflare.com URL
 
 bash << 'ENDSCRIPT'
 set -e
