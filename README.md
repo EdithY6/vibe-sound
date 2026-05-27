@@ -180,35 +180,28 @@ wait "$CF_PID"
 ENDSCRIPT
 
 
-## Config knobs (via `.env`)
+## Config knobs (`.env`)
 
 - `VIBESOUND_MUSIC_BACKEND=auto|local|space`
 - `VIBESOUND_AUDIO_FORMAT=mp4|wav`
-- `FFMPEG_PATH=/path/to/ffmpeg` (optional)
-- `MUSICGEN_MODEL=facebook/musicgen-small` (optional)
-- `VIBESOUND_CLAP_MODEL=laion/clap-htsat-fused` (optional)
+- `FFMPEG_PATH=/path/to/ffmpeg` *(optional)*
+- `MUSICGEN_MODEL=facebook/musicgen-small` *(optional)*
+- `VIBESOUND_CLAP_MODEL=laion/clap-htsat-fused` *(optional)*
 
 ## Troubleshooting
 
-- **401 mood model**
-  - `HF_TOKEN` missing/invalid, or you didn’t accept the gated model access on HF:
-    - `https://huggingface.co/MelodyWEN7/vibesound-music-mood-classifier`
+- **401 / mood model won’t load**
+  - `HF_TOKEN` missing/invalid **or** you didn’t accept the gated model:
+  - `https://huggingface.co/MelodyWEN7/vibesound-music-mood-classifier`
 
 - **Music too slow**
-  - CPU MusicGen is slow. Use a GPU box, or set `VIBESOUND_MUSIC_BACKEND=space`.
+  - CPU MusicGen is slow → use GPU **or** set `VIBESOUND_MUSIC_BACKEND=space`.
 
 - **No tunnel URL**
-  - Check Cloudflare tunnel log:
-    - `tail -n 200 /tmp/vibesound-cf.log`
-  - If the tunnel process died, rerun the script (it `pkill`s old `cloudflared`).
+  - `tail -n 200 /tmp/vibesound-cf.log`
 
 - **Streamlit died**
-  - Check Streamlit log:
-    - `tail -n 200 /tmp/vibesound-st.log`
-  - Common causes:
-    - OOM (models are big) → restart + prefer GPU or `VIBESOUND_MUSIC_BACKEND=space`
-    - missing `ffmpeg` with `VIBESOUND_AUDIO_FORMAT=mp4` → set `VIBESOUND_AUDIO_FORMAT=wav` or install ffmpeg / set `FFMPEG_PATH`
+  - `tail -n 200 /tmp/vibesound-st.log`
 
-- **MP4 download becomes WAV**
-  - ffmpeg missing/failed. Fix by installing ffmpeg or setting `FFMPEG_PATH`.
-  - Quick workaround: set `VIBESOUND_AUDIO_FORMAT=wav` and restart Streamlit.
+- **Wanted MP4, got WAV**
+  - ffmpeg missing/failed → install ffmpeg or set `FFMPEG_PATH`, or set `VIBESOUND_AUDIO_FORMAT=wav`.
